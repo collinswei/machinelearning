@@ -1,0 +1,246 @@
+---
+title: "Prediction Assignment Writeup"
+author: "cansheng wei"
+date: "September 2, 2016"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,cache = TRUE)
+```
+
+#1. Background 
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here (see the section on the Weight Lifting Exercise Dataset).
+
+##1.1 Project Data Source
+The training data for this project are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+The data for this project come from this source: http://groupware.les.inf.puc-rio.br/har. If you use the document you create for this class for any purpose please cite them as they have been very generous in allowing their data to be used for this kind of assignment.
+
+##1.2 Project Object
+One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants.
+
+#2. Preparing Data
+
+##2.1 Load Library
+Load the necessary libraies.
+
+```{r echo=TRUE}
+library(caret)
+library(randomForest)
+library(rpart)
+library(rpart.plot)
+library(RColorBrewer)
+library(rattle)
+library(data.table)
+library(ggplot2)
+```
+##2.2 Load Data
+Read the data from URL:
+```{r, echo=TRUE}
+urlTrain <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+urlTest <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+```
+Load the data into memory from the files, and check the data variables of train and test
+data set.
+```{r echo=TRUE}
+fileTrain <- "pml-training.csv"
+if (file.exists(fileTrain)) {
+        traindata <- read.csv(fileTrain, na.strings=c("NA","#DIV/0!",""))
+} else { 
+        download.file(urlTrain,fileTrain)
+        traindata <- read.csv(fileTrain, na.strings=c("NA","#DIV/0!",""))
+        }                           
+
+fileTest <- "pml-testing.csv"
+
+if (file.exists(fileTest)) {
+        testdata <- read.csv(fileTest, na.strings=c("NA","#DIV/0!",""))
+} else { 
+        download.file(urlTest,fileTest)
+        testdata <- read.csv(fileTest, na.strings=c("NA","#DIV/0!",""))
+} 
+
+summary(traindata$classe)
+
+summary(testdata$classe)
+```
+Here, we perform the basic data exporatory analysis.
+
+```{r echo = TRUE}
+#summary(traindata)
+#summary(traindata$classe)
+#summary(testdata)
+#summary(testdata$classe)
+#dim(traindata)
+#dim(testdata)
+#str(traindata)
+#str(testdata)
+#head(traindata)
+#str(testdata)
+```
+We can see that both data sets contains lots of NAs. we choose to delete these columns.For the first 7 columns, we also delet them, which are unnecessary for prediction.
+```{r echo=TRUE}
+traindata <- traindata[,colSums(is.na(traindata))==0]
+
+testdata <- testdata[,colSums(is.na(testdata))==0]
+
+traindata <- traindata[,-c(1:7)]
+
+testdata <- testdata[,-c(1:7)]
+
+```
+Now, set the seed for reproduceability.
+
+```{r echo=TRUE}
+set.seed(12345)
+```
+##2.3 Partitioning Traindata
+
+Partioning Training data set into two data sets, 70% for regressiong Training, 30% for regression Testing.The data is partitioned by the "classe" variable, which is the varible we will predict in the model. 
+
+```{r echo = TRUE}
+inTrain <- createDataPartition(y=traindata$classe, p = 0.70, list=FALSE)
+innertraining <- traindata[inTrain,]
+innertesting <- traindata[-inTrain,]
+
+dim(innertraining)
+
+dim(innertesting)
+
+innertraining$classe <- as.factor(innertraining$classe)
+
+innertesting$classe <- as.factor(innertesting$classe)
+
+```
+#3. Prediction Analysis Model
+
+In the analysis prediction model,the dependent variable is classe, which is a factor variable. For this data set, “participants were asked to perform one set of 10 repetitions of the Unilateral Dumbbell Biceps Curl in 5 different fashions: - exactly according to the specification (Class A) - throwing the elbows to the front (Class B) - lifting the dumbbell only halfway (Class C) - lowering the dumbbell only halfway (Class D) - throwing the hips to the front (Class E)
+
+We will run two models to test decision tree and random forest. The model with the highest accuracy will be chosen as our final model.
+
+##3.1 Model 1: Decision Tree
+
+```{r echo=TRUE}
+set.seed(12345)
+treefitmodel <- rpart(classe ~ ., data=innertraining, method="class")
+
+treeprediction <- predict(treefitmodel, innertesting, type = "class")
+
+rpart.plot(treefitmodel, main="Classification Tree", extra=102, under=TRUE, faclen=0)
+
+```
+
+For the decision tree model, we give the test result as follows:
+
+```{r echo=TRUE}
+
+confusionMatrix(treeprediction, innertesting$classe)
+
+accuracyTreemodel <- postResample(treeprediction, innertesting$classe)
+
+```
+Here, the accuracy of the decision tree model is:
+
+```{r echo= TRUE}
+
+accuracyTreemodel <- postResample(treeprediction, innertesting$classe)
+
+accuracyTreemodel
+
+```
+
+So, see that the decision tree model correctly classified 72% of the movements. 
+
+Then, the out-of-sample estimated accuracy is given by:
+
+```{r echo = TRUE}
+oostreemodle <- (1-as.numeric(confusionMatrix(innertesting$classe, treeprediction)$overall[1]))
+
+oostreemodle
+
+```
+we can say that about 26% of movements will be misclassified by the tree model.
+
+
+## 3.2 Model 2: Random Froest
+The reason for this is that Random Forest is very accurate among other algorithms and it runs very efficiently on large data sets. We will run the set on 5-fold cross validation.
+
+```{r echo= TRUE}
+set.seed(12345)
+
+controlfolds <- trainControl(method = "cv", 5)
+
+RFmodel <- train(classe ~ ., data = innertraining, method = "rf", trControl = controlfolds, ntree = 250)
+
+RFmodel
+
+```
+Now, we run the random forest model for the testing data:
+
+```{r echo = TRUE}
+
+RFprediction <- predict(RFmodel, innertesting)
+
+```
+
+Here, the accuracy of the random forest model is:
+
+```{r echo=TRUE}
+
+confusionMatrix(innertesting$classe, RFprediction)
+
+accuracyRFmodel <- postResample(RFprediction, innertesting$classe)
+
+accuracyRFmodel
+
+```
+
+From the confusion matrix and accurancy result, we can already tell the random forest model is better than the decison tree model. For each class of movement, the sensitivity and specificity are more than. And the random forest model achieves an accuracy of 98%, much higher than the accuracy of the decison tree model.
+
+Furthermore, the out-of-sample accuracy is:
+
+```{r echo = TRUE}
+oosrandommodel <- (1-as.numeric(confusionMatrix(innertesting$classe, RFprediction)$overall[1]))
+
+oosrandommodel
+
+```
+
+For random forest, we can see that only about 1% of movements to be misclassified.
+
+#4. Model Test
+
+##4.1 Decison Tree Model Test
+```{r echo = TRUE}
+resultTree <- predict(treefitmodel, testdata, type = "class")
+
+print(resultTree)
+```
+##4.2 Random Forest Model Test
+
+```{r echo=TRUE}
+resultRF <- predict(RFmodel,testdata)
+
+print(resultRF)
+```
+
+#5. Conclusion
+In this machine learning, we choose decision tree model and random forest model for testing. And we can see that the random forest model is obviously better than decision tree. Meanwhile, we then find the importance of features under the random model fit.
+
+```{r echo=TRUE}
+importance <- varImp(RFmodel, scale=FALSE)
+plot(importance)
+```
+
+#6. Reference
+
+[1]Data from the website:http://groupware.les.inf.puc-rio.br/har
+
+[2]Velloso, E.; Bulling, A.; Gellersen, H.; Ugulino, W.; Fuks, H. Qualitative Activity Recognition of Weight Lifting Exercises. Proceedings of 4th International Conference in Cooperation with SIGCHI (Augmented Human ’13) . Stuttgart, Germany: ACM SIGCHI, 2013.
